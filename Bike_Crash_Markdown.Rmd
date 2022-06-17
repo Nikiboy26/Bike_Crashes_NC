@@ -1,8 +1,7 @@
 ---
-title: "Bike Crash North Caroline"
-author: "Nikita Kaymonov"
-date: "12/13/2021"
+title: "Bike Crashes NC"
 output: html_document
+date: '2022-06-17'
 ---
 
 ```{r setup, include=FALSE}
@@ -13,27 +12,21 @@ knitr::opts_chunk$set(echo = TRUE)
 You have been working with the local government to help direct policy decisions. They are concerned about an increase in traffic accidents and think they may be able to make changes to reduce the severity of accidents that do occur. But they don’t know what the most important features are for defining the difference between severity of an accident. They would like you to investigate the data and see if it would be possible to find the factors that are most important. Based on these factors, what changes should be made to reduce the severity of accidents that do occur?
 
 
-```{r echo = T, message=FALSE}
+```{r include = F}
 library(tidyverse)
 library(readr)
-library(ranger)
 library(stringr)
-
+library(plotly)
+library(ranger)
 ```
 
-#### Load the data 
 
 ```{r echo=FALSE, message= F}
 bikes <- read_csv("https://github.com/datacamp/careerhub-data/raw/master/Pedestrian%20and%20Bike%20Crashes/pedestrian_bike_crash.csv", 
                   na = c('Missing', 'Unknown'))%>%
-  rename_all(tolower)
+  rename_all(tolower) #lower  eeverything for the constisntency
 ```
 
-The dataset has a lot of columns. Some columns are not interesting for particular question, some columns have too many NA's. OTher columns like alcohol were removed because number of drivers who test positive for alcohol almost non-existent. 
-
-```{r}
-dim(bikes)
-```
 
 
 ```{r echo=FALSE}
@@ -44,50 +37,46 @@ bikes <- bikes%>%
             longitude, latitude, objectid, crashid, numbicsbin,
             numbicsuin, drvragegrp, drvralcflg, county, bikeinjury, drvrinjury,crashsevr,
             drvrvehtyp, rddefects, bikealcdrg))
+
+# The dataset has a lot of columns. Some columns are not interesting for a particular question, some columns have too many NA's. Other columns like alcohol were removed because the number of drivers who test positive for alcohol is almost non-existent. 
 ```
 
 
-### Pre-processing 
-```{r echo = F}
+
+```{r include = F}
 library(visdat)
 #visualize missing data 
 vis_miss(bikes)
-```
 
-Since missing data is under 2% of all the data it's safe to just remove these rows for now 
+# Since missing data is under 2% of all the data it's safe to just remove these rows for now 
 
-
-```{r}
-summary(as.factor(bikes$bikeagegrp))
-```
-
-Looks like a mistake during the data entry stage and some numbers became month names. 
-
-```{r echo = F}
 bikes <- na.omit(bikes)
 #Looks like dirung data entry somebody changed number to month for same age categories 
 bikes <- bikes %>%
-  mutate(bikeagegrp = str_replace_all(bikeagegrp, c(Oct = "10", Nov = "11")))
+  mutate(bikeagegrp = str_replace_all(bikeagegrp, c(Oct = "10", Nov = "11")))%>%
+          rename(ambulance = ambulancer)
 ```
 
+
 #### Basic EDA 
-I decided to go with 'Ambulancer' column as an indicator of the severity of an accident. There are some other columns, but they contain categories like 'suspected" or 'possible injury'. Here I assume that if there is an ambulance, the case is serious enough to investigate the reasons. 
+I decided to go with the 'Ambulance' column as an indicator of the severity of an accident. There are some other columns, but they contain categories like 'suspected" or 'possible injury'. Here I assume that if there is an ambulance, the case is serious enough to investigate the reasons. 
 
 ```{r echo =F}
 #Yearly dinamics  
-bikes%>%
-  group_by(crashyear, ambulancer)%>%
+ggplotly(bikes%>%
+  group_by(crashyear, ambulance)%>%
   count()%>%
-  ggplot(aes(x = crashyear, y = n, fill = ambulancer)) + geom_col() + ylim(0, 800) +
+  ggplot(aes(x = crashyear, y = n, fill = ambulance)) + geom_col() + ylim(0, 800) +
   scale_x_continuous(breaks = c(2007:2019)) + labs(x = 'Year',
                                                    y = 'Number of crashes',
                                                    title = 'Bike crashes every year') + 
-  scale_fill_manual(values=c("#2CD3F8", "#F6685F")) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-                                                            panel.background = element_blank(), axis.line = element_line(colour = "black"))
+  scale_fill_manual(values=c("#31a7eb", "#F6685F")) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                                                            panel.background = element_blank(), axis.line = element_line(colour = "black")))
   
 ```
 
-From looking at number of crashes per year I can't say that we see rise increase in traffic accidents
+From looking at the number of crashes per year I can't say that we see an increase in traffic accidents. 
+
 
 ```{r echo = F}
 #Crashes per month
@@ -97,63 +86,63 @@ bikes$crashmonth <- factor(bikes$crashmonth, levels = c("January", "February",
                                                         'August', 'September',
                                                         "October", "November",
                                                         "December"))
-
 bikes%>%
   count(crashmonth)%>%
-  ggplot(aes(x = crashmonth, y = n)) + geom_col() + labs(x = 'Month',
-                                                         y = 'Number of Crashes',
-                                                         title = 'Crashes per Month') + 
-  ylim(0, 1500) 
+  plot_ly(x = ~crashmonth, y = ~n, color = I("#31a7eb"))%>%
+  add_bars()%>%
+  layout(xaxis = list(title = 'Month'),
+         yaxis = list(title = 'Number of Crashes'))
 ```
 
-Monthly trend resembles average yearly temperature for North Carolina. This makes sense as warmer temperature means more people using bikes. 
+Monthly trend resembles the average yearly temperature for North Carolina. This makes sense as warmer temperature means more people using bikes.
 
 
 ```{r echo = F}
 #Hourly difference 
-bikes%>%
-  group_by(crashhour, ambulancer)%>%
+ggplotly(bikes%>%
+  group_by(crashhour, ambulance)%>%
   count()%>%
-  ggplot(aes(x = crashhour, y = n, fill = ambulancer)) + geom_col() + 
-  scale_fill_manual(values=c("#2CD3F8", "#F6685F")) + labs(x = 'Hour',
+  ggplot(aes(x = crashhour, y = n, fill = ambulance)) + geom_col() + 
+  scale_fill_manual(values=c("#31a7eb", "#F6685F")) + labs(x = 'Hour',
                                                            y = 'Number of Crashes', 
                                                            title = 'Number of Crashes for each hour') + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-                                                            panel.background = element_blank(), axis.line = element_line(colour = "black"))
+                                                            panel.background = element_blank(), axis.line = element_line(colour = "black")))
 ```
 
 Here we can observe not only the rise in bike crashes during the day but also the change in proportions of how many people need an ambulance. 
 
 ```{r echo = F}
 #Age groups 
-bikes%>%
-  group_by(bikeagegrp, ambulancer)%>%
+ggplotly(bikes%>%
+  group_by(bikeagegrp, ambulance)%>%
   count()%>%
-  ggplot(aes(x = bikeagegrp, y = n, fill = ambulancer)) + geom_col() + ylim(0, 2000) + 
-  scale_fill_manual(values=c("#2CD3F8", "#F6685F")) + labs(x = 'Age Group',
+  ggplot(aes(x = bikeagegrp, y = n, fill = ambulance)) + geom_col() + ylim(0, 2000) + 
+  scale_fill_manual(values=c("#31a7eb", "#F6685F")) + labs(x = 'Age Group',
                                                            y = 'Number of Crashes', 
-                                                           title = 'Number of crashes per Age Group') 
+                                                           title = 'Number of crashes per Age Group')  + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black")), tooltip = 'n')
 ```
 
-Looks like in 25-29 group people are less likely to get into accidents and then chances get higher as one gets older 
-
+Looks like in the 25-29 group people are less likely to get into accidents and then chances get higher as one gets older. 
 
 ```{r echo = F}
 #Directions 
-bikes%>%
-  group_by(bikedir, ambulancer)%>%
+ggplotly(bikes%>%
+  group_by(bikedir, ambulance)%>%
   count()%>%
-  ggplot(aes(x = reorder(bikedir, n), y = n, fill = ambulancer)) + geom_col() + 
+  ggplot(aes(x = reorder(bikedir, n), y = n, fill = ambulance)) + geom_col() + 
   labs(x = 'Direction', y = 'Number of Crashes', title = "Biker's Riding  Direction") + 
-  scale_fill_manual(values=c("#2CD3F8", "#F6685F")) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-                                                            panel.background = element_blank(), axis.line = element_line(colour = "black"))
-
+  scale_fill_manual(values=c("#31a7eb", "#F6685F")) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                                                            panel.background = element_blank(), axis.line = element_line(colour = "black")), tooltip = 'n')
 ```
 
-Most crashes happen while bikers ride along the traffic. This could mean poorly developed biking paths system which is not surprising when we talk about US cities.
+Most crashes happen while bikers ride along the traffic. This could mean a poorly developed biking paths system which is not surprising when we talk about US cities.
+
 
 ```{r echo = F}
 #Positions
-bikes%>%
+ggplotly(bikes%>%
   filter(bikepos %in% c(bikes %>%
                           count(bikepos)%>%
                           filter(n >100)%>%
@@ -168,69 +157,61 @@ bikes%>%
   ggplot(aes(x = reorder(bikepos,n), y = n, fill = bikedir)) + geom_col() + ylim(0, 8000) + 
   labs(x = "Biker's Position", y = 'Number of Crashes', title = 'Where Crashes Happen',
        subtitle = "Number of crashes grouped by biker's position and direction") + coord_flip() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-                                                            panel.background = element_blank(), axis.line = element_line(colour = "black"))
+                                                            panel.background = element_blank(), axis.line = element_line(colour = "black")), tooltip = 'n')
 ```
 
 Here we can see that indeed most crashes happen while bikers ride along the traffic and not using bike paths. Quick google search showed that even bike paths that do exist are very questionable quality. Probably digging into this could reduce accidents even more. 
 
 ```{r echo = F}
 #Where most crushes occure 
-bikes%>%
-  group_by(city, ambulancer)%>%
+ggplotly(bikes%>%
+  group_by(city, ambulance)%>%
   count()%>%
   arrange(desc(n))%>%
   head(20)%>%
-  ggplot(aes(x = reorder(city,n), y = n, fill = ambulancer)) + geom_col() + labs(x = 'Number of Crashes',
+  ggplot(aes(x = reorder(city,n), y = n, fill = ambulance)) + geom_col() + labs(x = 'Number of Crashes',
                                                               y = 'City',
                                                               title = 'Cities with most crashes') + 
-  scale_fill_manual(values=c("#2CD3F8", "#F6685F")) + 
+  scale_fill_manual(values=c("#31a7eb", "#F6685F")) + 
   coord_flip() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-                                                            panel.background = element_blank(), axis.line = element_line(colour = "black"))
+                                                            panel.background = element_blank(), axis.line = element_line(colour = "black")), tooltip = 'n')
 ```
 
-Here we can see that more populous cities have more crashes which can be explained by the amount of people using bikes there. But most of crashes actually happen in rural areas that lack bike infrastructure. This might be another indicator that fixing biking infrastructure can actually increase the situation. 
+Here we can see that more populous cities have more crashes which can be explained by the amount of people using bikes there. But most crashes actually happen in rural areas that lack bike infrastructure. This might be another indicator that fixing biking infrastructure can actually increase the situation. 
 
-
-```{r echo=FALSE}
+```{r include=FALSE}
 bikes <- bikes%>%
   filter(rdconditio %in% c("Dry", 'Wet'))
   #most of the conditions are super rare I'll keep only Dry/Wet
-
 #Road features
 bikes <- bikes%>%
   filter(rdfeature %in% c(bikes%>%
   count(rdfeature)%>%
   filter(n > 40)%>%
   pull(rdfeature)))
-
 #Crashtype 
 bikes <- bikes%>%
   filter(crashtype %in% c(bikes%>%
   count(crashtype)%>%
   filter(n > 50)%>%
   pull(crashtype)))
-
 #Lightcondition
 bikes <- bikes%>%
   filter(lightcond %in% c(bikes%>%
   count(lightcond)%>%
   filter(n> 50)%>%
     pull(lightcond)))
-
-
 #deffects 
 bikes <- bikes%>%
   filter(rdsurface %in% c(bikes%>%
   count(rdsurface)%>%
   filter(n > 50)%>%
   pull(rdsurface)))
-
 bikes <- bikes%>%
 filter(rdcharacte %in% c(bikes%>%
   count(rdcharacte)%>%
   filter(n > 50)%>%
   pull(rdcharacte)))
-
 #Road class
 bikes <- bikes%>%
   filter(rdclass %in% c(bikes%>%
@@ -243,7 +224,6 @@ bikes <- bikes%>%
                              count(traffcntrl)%>%
                              filter( n > 50)%>%
                              pull(traffcntrl)))
-
 #Remove cities that are very rare 
 bikes <- bikes%>%
   filter(city %in% c(bikes%>%
@@ -251,7 +231,6 @@ bikes <- bikes%>%
                        filter(n > 90)%>%
                        arrange(n)%>%
                        pull(city)))
-
 ```
 
 
@@ -267,29 +246,23 @@ bikes <- bikes%>%
 ```{r echo=F, message= F}
 library(tidymodels)
 library(rpart)
-
 ```
 
 ```{r}
-bikes$ambulancer <- as.factor(bikes$ambulancer)
-
+bikes$ambulance <- as.factor(bikes$ambulance)
 #SPLIT
 set.seed(666)
 # Create the balanced data split
 bikes_split <- initial_split(bikes, 
                              prop = .75,
-                             strata = ambulancer)
-
+                             strata = ambulance)
 # Extract the training and test set
 bikes_train <- training(bikes_split)
 bikes_test  <- testing(bikes_split)
-
 ```
-
 
 #### Random Forest 
 This is a go-to model for classification problems. Perfect balance between complexity and accuracy. 
-
 
 #### Plot Variable Importance 
 ```{r}
@@ -297,19 +270,17 @@ This is a go-to model for classification problems. Perfect balance between compl
 spec <- rand_forest() %>%
   set_mode("classification") %>%
   set_engine('ranger', importance = 'impurity')
-
 # Train the forest
 model <- spec %>%
-  fit(ambulancer ~.,
+  fit(ambulance ~.,
       data = bikes_train)
-
 # Plot the variable importance
-vip::vip(model) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-                                                            panel.background = element_blank(), axis.line = element_line(colour = "black"))
+vip::vip(model, aesthetics =list(fill = '#31a7eb')) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                        panel.background = element_blank(), axis.line = element_line(colour = "black"))
 ```
 
-Feature importance hepls us to identify features that are heaving most impact on outcome variable. Even though it's a good indicator for the analysis we have to be careful while interpreting these results. More domain knowledge is needed. 
-Here we see that the time when a crash happened has most affect on a severity of an accident. 
+Feature importance helps us to identify features that are having the most impact on outcome variables. Even though it's a good indicator for the analysis, we have to be careful while interpreting these results. More domain knowledge is needed. 
+Here we see that the time when a crash happened has the most effect on the severity of an accident. 
 
 ##### Evaluating accuracy 
 
@@ -317,24 +288,18 @@ Here we see that the time when a crash happened has most affect on a severity of
 # Generate predictions
 predictions <- predict(model,
                        new_data = bikes_test, type = 'class')
-
 # Add the true outcomes
 predictions_combined <- predictions %>% 
-  mutate(true_class = bikes_test$ambulancer)
-
-
+  mutate(true_class = bikes_test$ambulance)
 # The confusion matrix
 bikes_matrix <- conf_mat(data = predictions_combined,
                          estimate = .pred_class,
                          truth = true_class)
-
-
 # Get accuracy of the model 
 acc_auto <- accuracy(predictions_combined,
                      estimate = .pred_class, 
                      truth = true_class)
 acc_auto$.estimate
-
 ```
 
-Current accuracy is 0.7116345, which can be improved by tuning and using boosted-trees. But I would not be expecting big increase in model performance since we are trying to predict real-life events involving humans.
+Current accuracy is 0.7116345, which can be improved by tuning and using boosted-trees. But I would not be expecting a big increase in model performance since we are trying to predict real-life events involving humans and there's no machine learning algorithm that can predict human behaviour (yet).
